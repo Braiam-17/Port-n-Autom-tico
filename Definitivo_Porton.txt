@@ -1,0 +1,161 @@
+#include <Servo.h>
+#include <EEPROM.h>
+
+// Dirección en la EEPROM donde se almacenará la configuración
+#define EEPROM_ADDR 0
+
+// Definir la estructura para almacenar la configuración
+struct Configuracion {
+  bool portonAbierto;  // Estado del portón
+};
+
+// Variable para almacenar la configuración
+Configuracion configuracion;
+
+// Función para actualizar la configuración en la EEPROM
+void actualizarConfiguracion(bool portonAbierto) {
+  Configuracion nuevaConfiguracion = configuracion;
+  bool haCambiado = false;
+
+  // Verificar si la configuración ha cambiado
+  if (nuevaConfiguracion.portonAbierto != portonAbierto) {
+    haCambiado = true;
+  }
+
+  // Si la configuración ha cambiado, guardarla en la EEPROM
+  if (haCambiado) {
+    nuevaConfiguracion.portonAbierto = portonAbierto;
+    escribirConfiguracion(nuevaConfiguracion);
+  }
+}
+
+void visualizarEEPROM() {
+  Serial.println("Datos almacenados en la EEPROM:");
+
+  // Leer la configuración desde la EEPROM
+  EEPROM.get(EEPROM_ADDR, configuracion);
+
+  // Mostrar la configuración por el puerto serial
+  Serial.print("Estado del portón: ");
+  if (configuracion.portonAbierto) {
+    Serial.println("Abierto");
+  } else {
+    Serial.println("Cerrado");
+  }
+}
+
+// Función para escribir la configuración en la EEPROM
+void escribirConfiguracion(const Configuracion& config) {
+  EEPROM.put(EEPROM_ADDR, config);
+  Serial.println("Configuración guardada en la EEPROM.");
+}
+
+// Función para leer la configuración desde la EEPROM
+void leerConfiguracion() {
+  EEPROM.get(EEPROM_ADDR, configuracion);
+  Serial.println("Configuración cargada desde la EEPROM.");
+}
+
+struct LED {
+  int pin; 
+  bool estado; 
+};
+
+// Arreglo de LEDs
+LED leds[] = {
+  {2, LOW},  
+  {3, LOW}   
+};
+
+// Definir pines para el servo
+const int servoPin = 9;  // Pin para el servo MG996R
+
+// Crear objeto Servo
+Servo miServo;
+
+// Definir ángulos para el servo
+const int anguloAbierto = 0;  // Ángulo para cuando el portón está abierto
+const int anguloCerrado = 130;  // Ángulo para cuando el portón está cerrado
+
+// Definir variable para almacenar el estado del portón
+bool portonAbierto = false;
+
+void setup() {
+ // Inicializar pines para los LEDs como salidas
+  for (int i = 0; i < sizeof(leds) / sizeof(leds[0]); i++) {
+    pinMode(leds[i].pin, OUTPUT);
+  }
+  
+  // Inicializar servo
+  miServo.attach(servoPin);
+
+  // Inicializar comunicación Bluetooth
+  Serial.begin(9600);
+
+  // Mostrar datos almacenados en la EEPROM
+  visualizarEEPROM();
+  
+    // Leer la configuración almacenada en la EEPROM
+  leerConfiguracion();
+
+  // Aplicar la configuración al estado inicial del portón
+  if (configuracion.portonAbierto) {
+    abrirPorton();
+  } else {
+    cerrarPorton();
+  }
+}
+
+void loop() {
+  // Leer datos desde el módulo Bluetooth
+  if (Serial.available() > 0) {
+    char comando = Serial.read();
+
+    // Procesar comandos
+    if (comando == 'a' || comando == 'A') {  // Abrir portón
+      abrirPorton();
+    } else if (comando == 'c' || comando == 'C') {  // Cerrar portón
+      cerrarPorton();
+    }
+  }
+}
+
+void abrirPorton() {
+  portonAbierto = true;
+  juegoDeLucesAbriendo();
+  digitalWrite(leds[0].pin, HIGH);  // Encender LED verde
+  digitalWrite(leds[1].pin, LOW);  // Apagar LED rojo
+  miServo.write(anguloAbierto);
+  actualizarConfiguracion(portonAbierto);
+}
+
+void cerrarPorton() {
+  portonAbierto = false;
+  juegoDeLucesCerrando();
+  digitalWrite(leds[0].pin, LOW);  // Apagar LED verde
+  digitalWrite(leds[1].pin, HIGH);  // Encender LED rojo
+  miServo.write(anguloCerrado);
+  actualizarConfiguracion(portonAbierto);
+}
+
+void juegoDeLucesAbriendo() {
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(leds[0].pin, HIGH);  // Encender LED verde
+    digitalWrite(leds[1].pin, LOW);  // Apagar LED rojo
+    delay(100);
+    digitalWrite(leds[0].pin, LOW);  // Apagar LED verde
+    digitalWrite(leds[1].pin, HIGH);  // Encender LED rojo
+    delay(100);
+  }
+}
+
+void juegoDeLucesCerrando() {
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(leds[0].pin, LOW);  // Apagar LED verde
+    digitalWrite(leds[1].pin, HIGH);  // Encender LED rojo
+    delay(100);
+    digitalWrite(leds[0].pin, HIGH);  // Encender LED verde
+    digitalWrite(leds[1].pin, LOW);  // Apagar LED rojo
+    delay(100);
+  }
+}
